@@ -1,0 +1,19 @@
+
+tosca notes
+
+os version should not be an integer
+
+
+
+library notes
+
+
+- definition references interfaces by name in node, but by type in relation.
+- a couple of typos
+- capability matches node_type by bad name (should be types.nodes.Root)
+
+
+Binding to variables
+
+
+

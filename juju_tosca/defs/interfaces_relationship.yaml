@@ -1,0 +1,13 @@
+tosca.interfaces.relationship.Configure:
+  pre_configure_source:
+    description: Operation to pre-configure the source endpoint.
+  pre_configure_target:
+    description: Operation to pre-configure the target endpoint.
+  post_configure_source:
+    description: Operation to post-configure the source endpoint.
+  post_configure_target:
+    description: Operation to post-configure the target endpoint.
+  add_target:
+    description: Operation to add a target node.
+  remove_target:
+    description: Operation to remove a target node.  

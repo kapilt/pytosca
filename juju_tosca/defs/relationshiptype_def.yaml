@@ -1,0 +1,16 @@
+tosca.relationships.Root:
+  interfaces: [ tosca.interfaces.relationship.Configure ]
+
+tosca.relationships.DependsOn:
+  derived_from: tosca.relationships.Root
+  valid_targets: [ tosca.capabilities.Feature  ]
+
+tosca.relationships.HostedOn:
+  derived_from: tosca.relationships.DependsOn
+  valid_targets: [ tosca.capabilities.Container ]
+
+tosca.relations.ConnectsTo:
+  derived_from: tosca.relationships.DependsOn
+  valid_targets: [ tosca.capabilities.Endpoint ]
+
+
