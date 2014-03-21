@@ -2,12 +2,7 @@ tosca.nodes.Root:
    properties:
       - property
    capabilities: []
-   interfaces:
-      - create
-      - start
-      - stop
-      - install
-      - delete
+   interfaces: [ tosca.interfaces.relationship.Configure ]
 
 tosca.nodes.Compute:
    derived_from: tosca.nodes.Root

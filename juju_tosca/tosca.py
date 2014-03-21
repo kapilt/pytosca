@@ -1,32 +1,106 @@
+import logging
 import operator
 import yaml
 
 
+log = logging.getLogger("tosca.model")
+
+
 def yaml_load(content):
-    return yaml.load(content, loader=yaml.CSafeLoader)
+    return yaml.safe_load(content)
+
+
+def get_subclasses(klass):
+    subclasses = []
+    for cls in klass.__subclasses__():
+        subclasses.append(cls)
+        subclasses.extend(get_subclasses(cls))
+    return subclasses
+
+
+def get_baseclasses(klass):
+    parents = []
+    for cls in klass.__bases__:
+        parents.append(cls)
+        parents.extend(get_baseclasses(cls))
+    return parents
 
 
 class TypeRoot(object):
 
+    DEBUG = True
+
     @classmethod
     def load_definitions(cls, prefix, resource):
+        assert cls.__bases__ == (TypeRoot,), "Load from root of hierarchy"
+
         with open(resource) as fh:
             data = yaml_load(fh.read())
 
+        # map from tosca name to class
         class_map = {'%s.Root' % prefix: cls}
 
-        for sub in cls.__subclasses__():
-            class_map['%s.%s' % prefix: sub]
+        for sub in get_subclasses(cls):
+            key = getattr(sub, 'tosca_name', None)
+            if key is None:
+                key = '%s.%s' % (prefix, sub.__name__)
+            class_map[key] = sub
 
         cls.type_class_map = class_map
-        cls.type_data = data
-        #set(data.keys()).inter
+        cls.type_def = data
+        if cls.DEBUG:
+            missing = set(data.keys()).difference(class_map.keys())
+            if missing:
+                log.warning("Missing Types %s" % (", ".join(missing)))
 
-    def get_inherited_meta(cls, key):
-        pass
+    @classmethod
+    def load_interfaces(cls, resource):
+        with open(resource) as fh:
+            data = yaml_load(fh.read())
+        cls.type_interfaces = [Interface(k, v) for k, v in data.items()]
 
-    def get_parents(cls):
-        pass
+    @classmethod
+    def load_properties(cls, resource):
+        with open(resource) as fh:
+            data = yaml_load(fh.read())
+        cls.type_properties = data
+
+    @classmethod
+    def get_type_value(cls, key):
+        """Get merged inherited value
+        """
+        candidates = get_baseclasses(cls)
+        candidates.insert(0, cls)
+        candidates.pop(-1)
+
+        value = None
+        for t in candidates:
+            v = cls.type_def.get(t.tosca_name).get(key)
+            if v is None:
+                continue
+            elif value is None:
+                value = v
+            elif isinstance(v, dict):
+                value.update(v)
+            elif isinstance(v, list):
+                value.extend(v)
+            else:
+                raise ValueError(
+                    "Invalid type meta key:%s previous:%s next:%s type:%s",
+                    key, value, v, t.tosca_name)
+
+
+class Interface(object):
+
+    def __init__(self, name, data):
+        self.name = name
+        self.data = data
+
+    def action_names(self):
+        return self.data.keys()
+
+    def description(self, action):
+        return self.data.get(action, {}).get('description')
 
 
 class Property(object):
@@ -70,20 +144,20 @@ class Constraint(object):
 class Node(TypeRoot):
 
     @property
-    def interfaces(self):
-        pass
+    def type_interfaces(self):
+        return self.get_type_value('interfaces')
 
     @property
-    def capabiltiies(self):
-        pass
+    def type_capabilities(self):
+        return self.get_type_value('capabilities')
 
     @property
-    def properties(self):
-        pass
+    def type_properties(self):
+        return self.get_type_value('properties')
 
     @property
-    def depends_on(self):
-        pass
+    def type_relations(self):
+        return self.get_type_value('requirements')
 
     @property
     def hosted_on(self):
@@ -107,16 +181,24 @@ class Compute(Node):
     """
 
 
-class Software(Node):
+class SoftwareComponent(Node):
     pass
 
 
-class DBMS(Software):
+class DBMS(SoftwareComponent):
     pass
 
 
 class Database(DBMS):
     pass
+
+
+class WebServer(SoftwareComponent):
+    pass
+
+
+class Wordpress(SoftwareComponent):
+    tosca_name = "tosca.nodes.WebApplication.WordPress"
 
 #########
 
@@ -128,11 +210,19 @@ class Capability(TypeRoot):
         pass
 
 
+class Feature(Capability):
+    pass
+
+
 class Container(Capability):
     pass
 
 
 class Endpoint(Capability):
+    pass
+
+
+class DatabaseEndpoint(Endpoint):
     pass
 
 #########
@@ -152,3 +242,20 @@ class HostedOn(Relation):
 
 class ConnectsTo(Relation):
     pass
+
+
+def init():
+    Node.load_definitions(
+        'tosca.nodes', 'defs/nodetypesdef.yaml')
+    Node.load_interfaces(
+        'defs/interfaces_node.yaml')
+    Capability.load_definitions(
+        'tosca.capabilities', 'defs/capabilitytype_def.yaml')
+    Relation.load_definitions(
+        'tosca.relationships', 'defs/relationshiptype_def.yaml')
+    Relation.load_interfaces(
+        'defs/interfaces_relationship.yaml')
+
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
+    init()

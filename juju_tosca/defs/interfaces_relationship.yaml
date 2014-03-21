@@ -10,4 +10,4 @@ tosca.interfaces.relationship.Configure:
   add_target:
     description: Operation to add a target node.
   remove_target:
-    description: Operation to remove a target node.  
+    description: Operation to remove a target node.

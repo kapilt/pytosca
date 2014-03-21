@@ -9,7 +9,7 @@ tosca.relationships.HostedOn:
   derived_from: tosca.relationships.DependsOn
   valid_targets: [ tosca.capabilities.Container ]
 
-tosca.relations.ConnectsTo:
+tosca.relationships.ConnectsTo:
   derived_from: tosca.relationships.DependsOn
   valid_targets: [ tosca.capabilities.Endpoint ]
 
