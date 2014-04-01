@@ -49,32 +49,50 @@ tosca.nodes.Compute:
        The primary IP address assigned by the cloud provider that applications may use to access the Compute node.
 
 tosca.nodes.SoftwareComponent:
+  version: 
+    required: no
+    type: string
+    description: >
+      Software component version.
 
 tosca.nodes.DBMS:
   dbms_port: 
     required: no
     type: integer
     description: >
-      Port for the database connection.
+      The port the DBMS service will listen to for data and requests.
   dbms_root_password:
     required: yes
     type: string
     description: >
-      Root password.
-      
+      The root password for the DBMS service.
+
 tosca.nodes.Database:
-  db_name:
-    type: string
-    description: The name of the database.
   db_user:
+    required: yes
     type: string
-    description: The user name of the DB user.
-  db_pwd:
+    description: > 
+      User account name for DB administration
+  db_name:
+    required: yes
     type: string
-    description: The WordPress database admin account password.
+    description: > 
+      The name of the database.
+  db_password:
+    required: yes
+    type: string
+    description: >
+      The password for the DB user account
 
 tosca.nodes.WebServer:
    
 tosca.nodes.WebApplication.WordPress:
-
-
+  admin_user:
+    required: no
+    type: string
+  admin_password:
+    required: no
+    type: string
+  db_host:
+    required: no
+    type: string
