@@ -3,17 +3,14 @@ tosca.relationships.Root:
 
 tosca.relationships.DependsOn:
   derived_from: tosca.relationships.Root
-  aliases: ['dependency']
   valid_targets: [ tosca.capabilities.Feature  ]
 
 tosca.relationships.HostedOn:
   derived_from: tosca.relationships.DependsOn
-  aliases: ['host']
   valid_targets: [ tosca.capabilities.Container ]
 
 tosca.relationships.ConnectsTo:
   derived_from: tosca.relationships.DependsOn
-  aliases: ['connects', 'database', 'database_endpoint']
   valid_targets: [ tosca.capabilities.Endpoint ]
 
 

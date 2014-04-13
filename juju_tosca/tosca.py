@@ -139,7 +139,7 @@ class Interface(object):
 
     def validate(self):
         if not self.implementation:
-            return ["Invalid implementattion for %s with %s" % (
+            return ["Invalid implementation for %s with %s" % (
                 self.action, self.data)]
         return []
 

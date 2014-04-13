@@ -33,7 +33,7 @@ node_templates:
       - database_endpoint: mysql_database
     interfaces:
       create: wordpress_install.sh
-      configure: 
+      configure:
         implementation: wordpress_configure.sh
         input:
           wp_db_name: { get_property: [ mysql_database, db_name ] }
@@ -44,11 +44,11 @@ node_templates:
   mysql_database:
     type: tosca.nodes.Database
     properties:
-      db_name: { get_input: db_name } 
+      db_name: { get_input: db_name }
       db_user: { get_input: db_user }
       db_password: { get_input: db_pwd }
     capabilities:
-      DatabaseEndpoint:
+      database_endpoint:
         properties:
           port: { get_input: db_port }
     requirements:
@@ -66,7 +66,7 @@ node_templates:
     interfaces:
       create: mysql_dbms_install.sh
       start: mysql_dbms_start.sh
-      configure: 
+      configure:
         implementation: mysql_dbms_configure
         input:
           db_root_password: { get_property: [ mysql_dbms, dbms_root_password ] }
@@ -87,9 +87,9 @@ node_templates:
       num_cpus: { get_input: cpus }
       mem_size: 4096
       # host image properties
-      os_arch: x86_64 
-      os_type: Linux  
-      os_distribution: Fedora  
+      os_arch: x86_64
+      os_type: Linux
+      os_distribution: Fedora
       os_version: 18
 
 outputs:

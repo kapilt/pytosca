@@ -1,6 +1,7 @@
 import logging
 import operator
 import os
+import re
 import yaml
 
 try:
@@ -62,7 +63,41 @@ def merge(x, y):
         return y
 
 
+def get_named_slot(req):
+    framework = set((
+        'interfaces', 'relationship_type', 'derived_from', 'constraints',
+        'lower_bound', 'upper_bound', 'type'))
+    keys = set(req.keys())
+    remainder = keys - framework
+    if len(remainder) != 1:
+        raise ValueError("Ambigious relation name %s" % (remainder))
+    return remainder.pop()
+
+
+def get_relation_type(name, data):
+    rel_type = data.get('relation_type')
+    if rel_type:
+        return rel_type
+    if name == 'host':
+        return 'HostedOn'
+    elif name == 'dependency':
+        return 'DependsOn'
+    else:
+        return "ConnectsTo"
+    return rel_type
+
+
 class TypeHierarchy(object):
+    """TOSCA MetaModel Type Container.
+
+    TOSCA has an extensible meta model consisting of node types,
+    interfaces, relations, and capabilities. The standard defines a
+    core set, but any topology author or engine can extend that set
+    with additional entity types that can be used in a topology.
+
+    The type hierarchy models all the entities to be utilized in
+    a topology.
+    """
 
     def __init__(self):
         self.nodes = {}
@@ -99,8 +134,12 @@ class TypeHierarchy(object):
         for n in self._derived_sort(names, data):
             type_info = data[n]
             base = self.nodes.get(type_info.get('derived_from'), Node)
-            print n, "base", base
-            # TODO Can collapse class hierarchy lookup here.
+
+            # Some basic validation of the type info
+            for t in type_info.get('capabilities', {}):
+                if not 'type' in t:
+                    log.warning('Malformed capability type %s %s', n, t)
+
             cls = type(n.split(".")[-1], (base,), {
                 'types': self,
                 'tosca_name': n,
@@ -159,51 +198,115 @@ class TypeHierarchy(object):
         return [n for n, _ in topological_sort(graph)]
 
 
-class InterfaceType(object):
+class ValueResolver(object):
+    """Resolve get_property/get_input/get_ref_property for values.
+    """
+    @staticmethod
+    def get_input(self, input_name):
+        input = self.topology.get_input(input_name)
+        if input is None:
+            raise ValueError("Unknown input: %s in property %s" % (
+                input_name, self))
+        return input.value
 
-    def __init__(self, name, data):
-        self.name = name
-        self.data = data
+    @staticmethod
+    def get_ref_property(self, slot_name, capability, property_name=None):
+        if property_name is None:
+            property_name = capability
+            capability = None
 
-    @property
-    def action_names(self):
-        return self.data.keys()
+        assert isinstance(self, Property), "Ref property needs property"
+        template = self.parent
+        for req in template.requirements:
+            if req.name == slot_name:
+                if not capability:
+                    p = req.target.get_property(property_name)
+                    if p is not None:
+                        return p.value
+                    raise ValueError(
+                        ("Unknown property: %s referenced on: %s"
+                         " via slot: %s from: %s") % (
+                             property_name,
+                             req.name,
+                             slot_name,
+                             "%s.%s" % (template.name, self.name)))
 
-    def description(self, action):
-        return self.data.get(action, {}).get('description')
+                for c in req.target.capabilities:
+                    if c.name == capability:
+                        for p in c.properties:
+                            if p.name == property_name:
+                                return p.value
+                raise ValueError(
+                    ("Unknown capability property %s referenced on %s"
+                     " via slot: %s from %s") % (
+                         "%s.%s" % (capability, property_name),
+                         req.name,
+                         slot_name,
+                         "%s.%s" % (template.name, self.name)))
+        raise ValueError(
+            "Unknown requirement slot: %s from %s" % (
+                slot_name, "%s.%s" % (template.name, self.name)))
 
+    @staticmethod
+    def get_property(self, entity_name, property_name):
+        entity = self.topology.get_template(entity_name)
+        if entity is None:
+            raise ValueError(
+                "Unknown entity: %s in property %s" % (
+                    entity_name, self))
+        for p in entity.properties:
+            if p.name == property_name:
+                return p.value
+        raise ValueError("Unknown entity property: %s, %s in property %s" % (
+            entity_name, property_name, self))
 
-class Interface(object):
-
-    def __init__(self, action, data, topology=None):
-        self.action = action
-        self.data = data
-        self.topology = topology
-
-    @property
-    def implementation(self):
-        if isinstance(self.data, basestring):
-            return self.data
-        return self.data.get('implementation')
-
-    def validate(self):
-        if not self.implementation:
-            return ["Invalid implementation for %s with %s" % (
-                self.action, self.data)]
-        return []
+    @staticmethod
+    def resolve(property, value):
+        if 'get_input' in value:
+            return ValueResolver.get_input(
+                property, value['get_input'])
+        elif 'get_ref_property' in value:
+            return ValueResolver.get_ref_property(
+                property, *value['get_ref_property'])
+        elif 'get_property' in value:
+            return ValueResolver.get_property(
+                property, *value['get_property'])
+        else:
+            raise ValueError(
+                "Unknown property value %s" % (property, value))
 
 
 class Property(object):
 
     def __init__(self, name, type, description="",
                  required=False, constraints=None,
-                 default=None, topology=None):
+                 default=None, topology=None, value=None):
         self.name = name
         self.required = required
         self.type = type
         self.constraints = constraints
         self.description = description
         self.default = default
+        self.topology = topology
+        self._value = value or self.default
+        self._parent = None
+
+    @property
+    def value(self):
+        if not isinstance(self._value, dict):
+            return self._value
+        return ValueResolver.resolve(self, self._value)
+
+    @property
+    def parent(self):
+        return self._parent
+
+    def set_parent(self, parent):
+        self._parent = parent
+
+    def __repr__(self):
+        return "<tosca.Property name:%s type:%s rvalue:%s>" % (
+            self.name, self.type, self._value)
 
 
 class Constraint(object):
@@ -214,12 +317,12 @@ class Constraint(object):
         'greater_or_equal': operator.ge,
         'less_than': operator.lt,
         'less_or_equal': operator.le,
-        'in_range': None,
+        'in_range': lambda x, y: y in range(x[0], x[1]),
         'valid_values': operator.contains,
-        'length': None,
-        'min_length': None,
-        'max_length': None,
-        'pattern': None}
+        'length': lambda x, y: len(y) == x,
+        'min_length': lambda x, y: len(y) > x,
+        'max_length': lambda x, y: len(y) < x,
+        'pattern': lambda x, y: bool(re.match(x, y))}
 
     @classmethod
     def validate(cls, constraint_type, constraint, value):
@@ -233,7 +336,7 @@ class Value(object):
     def __init__(self, name, attrs):
         self.name = name
         self.attrs = attrs
-        self.value = None
+        self._value = None
 
     @property
     def type(self):
@@ -251,9 +354,13 @@ class Value(object):
     def constraints(self):
         return self.attrs.get('constraints')
 
+    @property
+    def value(self):
+        return self.attrs.get('value')
+
     def set_value(self, value):
-        assert self.value is None
-        self.value = value
+        assert 'value' not in self.attrs
+        self.attrs['value'] = value
 
 
 class Input(Value):
@@ -263,6 +370,18 @@ class Input(Value):
 class Output(Value):
     """Topology template output value."""
 
+    def __init__(self, name, attrs, topology=None):
+        self.name = name
+        self.attrs = attrs
+        self.topology = topology
+
+    @property
+    def value(self):
+        value = self.attrs['value']
+        if isinstance(value, dict):
+            return ValueResolver.resolve(self, value)
+        return value
+
 
 class Entity(object):
 
@@ -271,54 +390,129 @@ class Entity(object):
         self.data = data
         self.topology = topology
 
+    def __repr__(self):
+        return "<%s name: %s>" % (self.__class__.__name__, self.name)
 
-class Node(Entity):
 
-    _requirements = None
-    _capabilities = None
-    _interfaces = None
+class PropertyContainer(Entity):
+
     _properties = None
-
-    @property
-    def capabilities(self):
-        capabilities = []
-        for k, v in self._capability.items():
-            pass
-        return capabilities
+    _property_key = "properties"
+    _parent = None
 
     @property
     def properties(self):
         properties = []
-        for k, v in self.data.get('properties', {}).items():
-            if not k in self._properties:
-                raise TypeError(
-                    "Unknown property:%s defined on type:%s valid:%s" % (
-                        k, self.tosca_name, self._properties.keys()))
-            properties.append(Property(k, topology=self.topology, **v))
+        template_properties = self.data.get(self._property_key, {})
+        for k, schema in self._properties.items():
+            v = None
+            if k in template_properties:
+                v = template_properties[k]
+            p = Property(k, topology=self.topology, value=v, **schema)
+            # Need parent to resolve get_ref_property functions
+            p.set_parent(self._parent or self)
+            properties.append(p)
         return properties
+
+    def get_property(self, name):
+        schema = self._properties.get(name)
+        if schema is None:
+            return None
+        v = self.data.get(self._property_key, {}).get(name, None)
+        p = Property(name, topology=self.topology, value=v, **schema)
+        p.set_parent(self._parent or self)
+        return p
+
+
+class InterfaceType(object):
+
+    def __init__(self, name, data):
+        self.name = name
+        self.data = data
+
+    @property
+    def operations(self):
+        return self.data.keys()
+
+    def description(self, op):
+        return self.data.get(op, {}).get('description')
+
+
+class InterfaceOperation(PropertyContainer):
+
+    _property_key = 'input'
+
+    @property
+    def implementation(self):
+        if isinstance(self.data, basestring):
+            return self.data
+        return self.data.get('implementation')
+
+    def validate(self):
+        return []
+        if not self.implementation:
+            return ["Invalid implementation for %s with %s" % (
+                self.name, self.data)]
+        return []
+
+    def __repr__(self):
+        return "<Operation name:%s impl:%s>" % (
+            self.name, self.implementation)
+
+
+class Node(PropertyContainer):
+
+    _requirements = None
+    _capabilities = None
+    _interfaces = None
+
+    @property
+    def capabilities(self):
+        capabilities = []
+        template_capabilities = self.data.get('capabilties', {})
+        for name, ctype_info in self._capabilities.items():
+            capability_class = self.types.get(ctype_info['type'])
+            data = template_capabilities.get(name, {})
+            capabilities.append(capability_class(name, data))
+        return capabilities
 
     @property
     def requirements(self):
         requirements = []
-        for req in self.data.get('requirements', []):
-            rel_type = req.get('relation_type')
-            if rel_type is None:
-                for n in self._requirements:
-                    if req.keys() == n.keys():
-                        pass
-            requirements.append(rel_class(self.name, req, self.topology))
+        template_reqs = {}
+        for tmpl_req in self.data.get('requirements', []):
+            template_reqs[get_named_slot(tmpl_req)] = tmpl_req
+        for req in self._requirements:
+            req = dict(req)
+            name = get_named_slot(req)
+            data = template_reqs.get(name, {})
+            req.update(data)
+            rel_type = get_relation_type(name, data)
+            rel_class = self.types.get(rel_type)
+            requirements.append(rel_class(name, req, self.topology))
         return requirements
 
     @property
     def interfaces(self):
         interfaces = []
-        allowed_ops = self.type_operations
-        for k, v in self.data.get('interfaces', {}).items():
-            if not k in allowed_ops:
-                raise ValueError(
-                    "Invalid interface operation %s valid are %s" % (
-                        k, allowed_ops))
-            interfaces.append(Interface(k, v, self.topology))
+        # interface usage by templates typically isn't scoped enough
+        # to allow for multiple interfaces. intended usage is a single
+        # lifecycle per node or relation.
+        if isinstance(self._interfaces, list):
+            interface_type = self.types.get(
+                self._interfaces[0], types=('interfaces',))
+            idata = {}
+        else:
+            idata = self._interfaces[self._interfaces.keys()[0]]
+            interface_type = self.types.get(
+                self._interfaces.keys()[0], types=('interfaces',))
+
+        template_data = self.data.get('interfaces', {})
+        # TODO: Carry forward interface level properties to operation
+        for op in interface_type.operations:
+            interfaces.append(
+                InterfaceOperation(
+                    op, template_data.get(op, idata), self.topology))
         return interfaces
 
     def validate(self):
@@ -334,22 +528,33 @@ class Node(Entity):
         return errors
 
 
-class Capability(Entity):
-
-    _properties = None
-
-    @property
-    def properties(self):
-        pass
+class Capability(PropertyContainer):
 
     def validate(self):
         return []
 
 
 class Relation(Entity):
-
+    """
+    A relation can point to another tmpleate within the graph, or
+    be defined as unbound resource for the engine to fill.
+    """
     _valid_targets = None
     _interfaces = None
+
+    @property
+    def target(self):
+        entity_name = self.data[self.name]
+        if isinstance(entity_name, basestring):
+            if entity_name.startswith('tosca.'):  # also unbound
+                log.info("Unbound relation reference %s" % self.data)
+                return None
+            return self.topology.get_template(entity_name)
+        else:
+            log.info("Unbound relation reference %s" % self.data)
+        # If we have an anonymous requirement specification, it needs
+        # to be bound to this resource.
+        return None
 
     def validate(self):
         return []
@@ -400,7 +605,7 @@ class Tosca(object):
         return Input(name, value)
 
     def bind_inputs(self, values):
-        for k, v in values:
+        for k, v in values.items():
             input = self.get_input(k)
             if input is None:
                 raise ValueError("Unknown input %s" % k)
@@ -410,38 +615,38 @@ class Tosca(object):
     def outputs(self):
         outputs = []
         for k, v in self.data.get('outputs', {}).items():
-            outputs.append(Output(k, v))
+            outputs.append(Output(k, v, self))
         return outputs
 
     def get_output(self, name):
         value = self.data.get('outputs', {}).get(name)
         if value is None:
             return value
-        return Output(name, value)
+        return Output(name, value, self)
 
     @property
     def nodetemplates(self):
         nodes = []
         for k, v in self.data.get('node_templates', {}).items():
             node_type = v.get('type')
-            node_cls = Node.get_type(node_type)
+            node_cls = self.types.get(node_type)
             if node_cls is None:
                 raise TypeError(
                     "Unknown node template type %s for %s" % (
                         node_type, k))
-            nodes.append(Node(k, v, self))
+            nodes.append(node_cls(k, v, self))
         return nodes
 
     def get_template(self, name):
         value = self.data.get('node_templates', {}).get(name)
         if value is None:
             return value
-        node_cls = Node.get_type(value.get('type'))
+        node_cls = self.types.get(value.get('type'))
         if node_cls is None:
             raise TypeError(
                 "Unknown node template type %s for %s" % (
                     value.get('type'), name))
-        return node_cls(name, value)
+        return node_cls(name, value, self)
 
     # More advanced properties
     @property
@@ -473,28 +678,3 @@ class Tosca(object):
         with open(path) as fh:
             data = yaml_load(fh.read())
         return cls(data)
-
-
-def main():
-    import pprint
-    logging.basicConfig(level=logging.DEBUG)
-    types = TypeHierarchy()
-    types.load_schema(Tosca.schema_path)
-    print "Nodes"
-
-    pprint.pprint(types.nodes)
-    print "\nCapabilities"
-    pprint.pprint(types.capabilities)
-    print "\nRelations"
-    pprint.pprint(types.relations)
-    print "\nInterfaces"
-    pprint.pprint(types.interfaces)
-
-if __name__ == '__main__':
-    try:
-        main()
-    except:
-        import pdb, traceback, sys
-        traceback.print_exc()
-        pdb.post_mortem(sys.exc_info()[-1])
-

@@ -16,9 +16,9 @@ tosca.capabilities.Endpoint:
       default: http
     port:
       type: integer
-    constraints:
-      - greater_or_equal: 1
-      - less_or_equal: 65535
+      constraints:
+        - greater_or_equal: 1
+        - less_or_equal: 65535
     secure:
       type: boolean
       default: false
