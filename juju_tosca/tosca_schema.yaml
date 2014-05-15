@@ -242,8 +242,8 @@ tosca.interfaces.node.Lifecycle:
     description: Basic lifecycle delete operation.
 
 tosca.interfaces.relationship.Configure:
-  post_configure_source:
-    description: Operation to post-configure the source endpoint.
+  pre_configure_source:
+    description: Operation to pre-configure the source endpoint.
   post_configure_target:
     description: Operation to post-configure the target endpoint.
   add_target:

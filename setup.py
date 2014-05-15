@@ -11,9 +11,10 @@ setup(name='juju-tosca',
       description="Application topologies using OASIS TOSCA YAML Profile",
       long_description=open("README.rst").read(),
       url='https://github.com/kapilt/juju-tosca',
-      license='LGPL',
+      license='GPL',
       packages=find_packages(),
-      install_requires=["PyYAML", "requests"],
+      package_data={'juju_tosca': ['tosca_schema.yaml']},
+      install_requires=["PyYAML"],
       entry_points={
           "console_scripts": [
               'juju-tosca = juju_tosca.cli:main']},
