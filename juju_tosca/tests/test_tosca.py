@@ -132,3 +132,17 @@ class TestWordpressMysqlTosca(TestCase):
         endpoint = db.get_capability('database_endpoint')
         self.assertEqual(
             endpoint.get_property('port').value, 3107)
+
+
+class TestMongoNode(TestCase):
+
+    def setUp(self):
+        self.topology = tosca.Tosca.load(
+            os.path.join(TEST_DATA, 'mongo-node.yaml'))
+
+    def test_template_types(self):
+        self.assertEqual(
+            sorted([
+                nt.name for nt in self.topology.nodetemplates]),
+            ['app', 'app_server', 'mongo_db',
+             'mongo_dbms', 'mongo_server'])

@@ -1,3 +1,8 @@
+#
+# Copyright 2014 Canonical Ltd
+# Author: Kapil Thangavelu <kapil.foss@gmail.com>
+# License: LPGL
+
 import logging
 import operator
 import os
@@ -13,6 +18,10 @@ except ImportError:
 log = logging.getLogger("tosca.model")
 
 ENTITY_KINDS = ('nodes', 'capabilities', 'relations', 'interfaces')
+
+ENTITY_TYPE_MAP = dict(zip(
+    ENTITY_KINDS,
+    ('node_types', 'capability_types', 'relation_types', '')))
 
 
 def yaml_load(content):
@@ -581,6 +590,14 @@ class Tosca(object):
         self.data = data
         self.types = TypeHierarchy()
         self.types.load_schema(self.schema_path)
+        self._load_template_schema()
+
+    def _load_template_schema(self):
+        for k, v in ENTITY_TYPE_MAP.items():
+            if not v or not v in self.data:
+                continue
+            loader = getattr(self.types, 'load_%s' % k)
+            loader(self.data[v].keys(), self.data[v])
 
     @property
     def tosca_version(self):

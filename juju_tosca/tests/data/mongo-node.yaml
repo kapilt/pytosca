@@ -1,0 +1,172 @@
+tosca_definitions_version: tosca_simple_1.0.0
+
+description: >
+  TOSCA simple profile with node.js, mongodb,... 
+
+inputs:
+
+capability_types:
+  tosca.capabilities.MongoEndpoint:
+    derived_from: tosca.capabilities.DatabaseEndpoint
+
+node_types:
+  tosca.nodes.Database.MongoDB:
+    derived_from: tosca.nodes.Database
+    requirements:
+      - host: tosca.nodes.DBMS.MongoDB
+    capabilities:
+      database_endpoint: tosca.capabilities.MongoEndpoint
+    
+  tosca.nodes.DBMS.MongoDB:
+    derived_from: tosca.nodes.DBMS
+    properties:
+      dbms_port:
+        description: reflect the default MongoDB server port 
+        default: 27017
+    requirements:
+      - host: tosca.nodes.Compute
+        constraints:
+          os_distribution: 
+            - valid_values: [Ubuntu] 
+          os_version: 
+            - valid_values: [12.04, 14.04]
+    capabilities:
+      host: 
+        type: Container
+        properties:
+          valid_node_types: [ tosca.nodes.Database.MongoDB ] 
+    interfaces:
+        Standard:
+          create: |
+            #!/bin/bash
+            apt-get install -y mongodb
+          start: |
+            #!/bin/bash
+            start mongodb 
+          stop: |
+            #!/bin/bash
+            stop mongodb
+          delete:
+            implementation: |
+              #!/bin/bash
+              apt-get purge -y mongodb
+                        
+  tosca.nodes.Nodejs:
+    derived_from: tosca.nodes.SoftwareComponent
+    properties:
+      github_url:
+        description: location of the application on the github.
+        default: https://github.com/mmm/testnode.git
+    requirements:
+      - mongodb: tosca.capabilities.MongoEndpoint
+        relationship_type: tosca.relationships.ConnectsTo
+        interfaces:
+          tosca.interfaces.relationship.Configure:
+            pre_configure_source:
+              inputs:
+                host: { get_property: [ TARGET, ip_address ] }
+                port: { get_property: [ TARGET, port]}                     
+              implementation: |
+                #!/bin/bash
+                cat > /opt/node/config.js<<EOF
+                {
+                "host": "${host}"
+                , "port": ${port}
+                }
+                EOF
+
+                    
+      - host: tosca.nodes.Compute
+        constraints:
+          os_distribution:
+            - valid_values: [Ubuntu] 
+          os_version: 
+            - valid_values: [12.04, 14.04] 
+    interfaces:                
+      Standard:
+        create: |
+          #!/bin/bash
+          add-apt-repository ppa: chris-lea/node.js
+          apt-get update
+          apt-get install -y nodejs build-essential curl git npm
+        configure: |
+          #!/bin/bash
+          export app_dir=/opt/app
+          git clone $github_url /opt/app
+          if [ -f /opt/app/package.json ] 
+             cd  /opt/app/ && npm install
+          fi
+
+          cat > /etc/init/nodeapp.conf <<EOS
+          description "node.js app"
+          
+          start on (net-device-up
+          and local-filesystems
+          and runlevel [2345])
+          stop on runlevel [!2345]
+          
+          expect fork
+          respawn
+          
+          script
+          export HOME=/
+          export NODE_PATH=/usr/lib/node
+          exec /usr/bin/node ${app_dir}/server.js >> /var/log/nodeapp.log 2>&1 &
+          end script
+          EOS
+        start: |
+          #!/bin/bash
+          start nodeapp
+        stop: |
+          #!/bin/bash
+          stop nodeapp
+        delete: |
+          #!/bin/bash
+          rm -Rf /opt/nodeapp
+          apt-get remove -y nodejs npm build-essential git curl
+
+
+
+        
+node_templates:
+  mongo_db:
+    type: tosca.nodes.Database.MongoDB
+    requirements:
+        host: mongo_dbms
+  mongo_dbms:
+    type: tosca.nodes.DBMS.MongoDB
+    requirements:
+        host: mongo_server
+  mongo_server:
+    type: tosca.nodes.Compute
+    properties:
+      # compute properties (flavor)
+      disk_size: 10
+      num_cpus: { get_input: my_cpus }
+      mem_size: 4096
+      # host image properties
+      os_arch: x86_64 
+      os_type: Linux  
+      os_distribution: Ubuntu
+      os_version: 14.04    
+  app:
+    type: tosca.nodes.Nodejs
+    properties:
+        github_url: https://github.com/mysupercool/foobuzz.git
+    requirements:
+      host: app_server
+      mongodb: mongo_db  
+  app_server:
+    type: tosca.nodes.Compute
+    properties:
+      # compute properties (flavor)
+      disk_size: 10
+      num_cpus: { get_input: my_cpus }
+      mem_size: 4096
+      # host image properties
+      os_arch: x86_64 
+      os_type: Linux  
+      os_distribution: Ubuntu
+      os_version: 14.04    
+outputs:
+
