@@ -1,6 +1,9 @@
 PyTosca
 -------
 
+[![Build Status](https://api.travis-ci.org/kapilt/pytosca.svg)](https://travis-ci.org/kapilt/pytosca)
+
+
 A python library for using OASIS Tosca YAML Simple Profile 1.0
 
 This library was initially implemented as a learning exercise
