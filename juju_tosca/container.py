@@ -1,3 +1,0 @@
-
-class Archive(object):
-    pass

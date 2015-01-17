@@ -1,7 +1,13 @@
-Juju Tosca
-----------
+PyTosca
+-------
 
-An integration between Juju and OASIS Tosca YAML Simple Profile 1.0
+A python library for using OASIS Tosca YAML Simple Profile 1.0
+
+This library was initially implemented as a learning exercise
+for evaluating an early draft of the standard.
+
+A readily available alternative for tosca is the one toscalib
+embedded in the heat-translator.
 
 
 Tosca Modeling
@@ -14,19 +20,15 @@ which are the actualization of the meta model as loaded from a tosca
 yaml file. Finally the realized node resoures which are created by
 an orchestrator and associated to their corresponding node templates.
 
-The tosca standard has no formalized notion of realized topology
-resources at this time.
-
-This library chooses to map these distinct aggregates using
-native python language constructs, meta models correspond to classes,
-node templates to instances of those classes.
+This library chooses to map these collections using native python
+language constructs, meta models correspond to classes, node templates
+to instances of those classes.
 
 
 Execution
 ---------
 
 The execution of the template takes place through three phases of binding
-
 
 Input binding
 
@@ -39,6 +41,8 @@ tosca notes
 
 Standards Questions
 -------------------
+
+[outdated]
 
  - what does a relation callout binding in a template look like.
  - relation shorthand form is not defined properly in the meta model
@@ -57,8 +61,9 @@ Standards Questions
 Feedback
 --------
 
- - os version should not be an integer, minimum it should be a float
+[outdated]
 
+ - os version should not be an integer, minimum it should be a float, ideally a string.
 
 library notes
 
