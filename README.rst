@@ -9,6 +9,7 @@ for evaluating an early draft of the standard.
 A readily available alternative for tosca is the one toscalib
 embedded in the heat-translator.
 
+https://github.com/openstack/heat-translator/tree/master/translator/toscalib
 
 Tosca Modeling
 --------------
