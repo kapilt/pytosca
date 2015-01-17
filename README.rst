@@ -26,6 +26,16 @@ language constructs, meta models correspond to classes, node templates
 to instances of those classes.
 
 
+Running Unit Tests
+------------------
+
+The stdlib test runner is integrated via setuptools ala::
+
+    $ python setup.py test
+
+Alternatively any other test runner can be used directly.
+
+
 Execution
 ---------
 

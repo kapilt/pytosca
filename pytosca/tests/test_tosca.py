@@ -14,7 +14,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import logging
 import inspect
+import StringIO
 import os
 
 from pytosca import tosca
@@ -25,9 +27,32 @@ TEST_DATA = os.path.join(
     os.path.dirname(inspect.getabsfile(tosca)), 'tests', 'data')
 
 
-class TestTypeHierarchy(TestCase):
+class BaseTest(TestCase):
+
+    def capture_logging(self, name="", level=logging.INFO,
+                        log_file=None, formatter=None):
+        if log_file is None:
+            log_file = StringIO.StringIO()
+        log_handler = logging.StreamHandler(log_file)
+        if formatter:
+            log_handler.setFormatter(formatter)
+        logger = logging.getLogger(name)
+        logger.addHandler(log_handler)
+        old_logger_level = logger.level
+        logger.setLevel(level)
+
+        @self.addCleanup
+        def reset_logging():
+            logger.removeHandler(log_handler)
+            logger.setLevel(old_logger_level)
+        return log_file
+
+
+class TestTypeHierarchy(BaseTest):
 
     def setUp(self):
+        self.log_output = self.capture_logging(
+            'tosca.model', level=logging.DEBUG)
         self.types = tosca.TypeHierarchy()
         self.types.load_schema(tosca.Tosca.schema_path)
 
@@ -59,8 +84,10 @@ class TestTypeHierarchy(TestCase):
             ops.get_property('db_password').value, None)
 
 
-class TestComputeOnlyTosca(TestCase):
+class TestComputeOnlyTosca(BaseTest):
     def setUp(self):
+        self.log_output = self.capture_logging(
+            'tosca.model', level=logging.DEBUG)
         self.topology = tosca.Tosca.load(
             os.path.join(TEST_DATA, 'tosca_compute_only.yaml'))
 
@@ -79,9 +106,11 @@ class TestComputeOnlyTosca(TestCase):
         self.assertEqual(instance_ip.value, '192.168.1.10')
 
 
-class TestWordpressMysqlTosca(TestCase):
+class TestWordpressMysqlTosca(BaseTest):
 
     def setUp(self):
+        self.log_output = self.capture_logging(
+            'tosca.model', level=logging.DEBUG)
         self.topology = tosca.Tosca.load(
             os.path.join(TEST_DATA, 'tosca_single_instance_wordpress.yaml'))
 
@@ -150,9 +179,11 @@ class TestWordpressMysqlTosca(TestCase):
             endpoint.get_property('port').value, 3107)
 
 
-class TestMongoNode(TestCase):
+class TestMongoNode(BaseTest):
 
     def setUp(self):
+        self.log_output = self.capture_logging(
+            'tosca.model', level=logging.DEBUG)
         self.topology = tosca.Tosca.load(
             os.path.join(TEST_DATA, 'mongo-node.yaml'))
 
